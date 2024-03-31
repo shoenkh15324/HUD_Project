@@ -2,11 +2,10 @@ import obd
 
 connection = obd.OBD() # usb 또는 rf 포트에 자동으로 연결
 
-cmd_fuel_rate = obd.commands.FUEL_RATE
-reponse_fuel_rate = connection.query(cmd_fuel_rate)
+fuel_rate = connection.query(obd.commands.FUEL_RATE ) # 연료율 구하기
 
-if reponse_fuel_rate.is_null():
+if fuel_rate.is_null(): # 만약 fuel_rate가 null이라면
      print("NO data\n")
 else:
-     print(reponse_fuel_rate.value)     
-
+     print(fuel_rate.value)
+     

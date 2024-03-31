@@ -5,14 +5,6 @@ import dlib
 detector = dlib.get_frontal_face_detector()
 predictor = dlib.shape_predictor("shape_predictor_68_face_landmarks.dat")
 
-# 이전 프레임에서 눈이 감겼는지 여부를 추적하는 변수 초기화
-prev_left_eye_closed = False
-prev_right_eye_closed = False
-
-# 눈 깜빡임 횟수를 저장하는 변수 초기화
-left_blink_count = 0
-right_blink_count = 0
-
 # 눈 중심을 표시하는 함수 정의
 def draw_eye_centers(frame, eyes):
     for (x, y, w, h) in eyes:
@@ -46,7 +38,7 @@ while True:
                x, y = landmarks.part(i).x, landmarks.part(i).y
                cv2.circle(frame, (x, y), 2, (0, 0, 255), -1)
             
-          # 눈 검출
+          # 눈 좌표 검출
           landmarks = predictor(gray, face)
           left_eye = landmarks.part(36).x, landmarks.part(37).y, landmarks.part(39).x - landmarks.part(36).x, landmarks.part(41).y - landmarks.part(37).y
           right_eye = landmarks.part(42).x, landmarks.part(43).y, landmarks.part(45).x - landmarks.part(42).x, landmarks.part(47).y - landmarks.part(43).y
