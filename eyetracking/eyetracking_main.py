@@ -2,106 +2,167 @@ import cv2
 import dlib
 import pyautogui
 
-# 얼굴 검출기와 눈 검출기 초기화
-detector = dlib.get_frontal_face_detector()
-predictor = dlib.shape_predictor("shape_predictor_68_face_landmarks.dat")
+# 화면에 표시하는 기능과 관련된 클래스
+class DrawSomething:
+     def __init__(self):
+          self.detector = dlib.get_frontal_face_detector()
+          self.predictor = dlib.shape_predictor("shape_predictor_68_face_landmarks.dat")
 
-# 랜드마크를 표시하는 함수 정의
-def draw_face_landmarks(frame, face):
-          landmarks = predictor(gray, face)
+     def draw_face_landmarks(self, frame, face):
+          """
+          Draw landmarks on the face.
+
+          Args:
+               frame (numpy.ndarray): Image frame.
+               face (dlib.rectangle): Detected face.
+
+          Returns:
+               None
+          """
+          landmarks = self.predictor(frame, face)
           for i in range(68):
                x, y = landmarks.part(i).x, landmarks.part(i).y
                cv2.circle(frame, (x, y), 2, (0, 0, 255), -1)
+
+     def draw_eye_centers(self, frame, eyes):
+          """
+          Draw the centers of both eyes.
+
+          Args:
+               frame (numpy.ndarray): Image frame.
+               eyes (tuple): A tuple containing the coordinates (x, y, width, height) of both eyes.
+
+          Returns:
+               None
+          """
+          coordinates = EyeCoordinate(eye_tracker)
+          centers = coordinates.get_centers(eyes)
+
+          for center in centers:
+               cv2.circle(frame, (center[0], center[1]), 2, (0, 255, 0), -1)
+               cv2.putText(frame, f"({center[0]}, {center[1]})", (center[0] - 35, center[1] + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 255, 0), 1)
+
+          print("left_eye:", centers[0], ", right_eye:", centers[1])
+
+     def draw_eye_sight(self, frame, eyes):
+          """
+          Draw the estimated eye sight.
+
+          Args:
+               frame (numpy.ndarray): Image frame.
+               eyes (tuple): A tuple containing the coordinates (x, y, width, height) of both eyes.
+
+          Returns:
+               None
+          """
+          coordinate = EyeCoordinate(eye_tracker)
+          sight = coordinate.get_sight(eyes)
+
+          cv2.circle(frame, (sight[0], sight[1]), 2, (255, 0, 0), -1)
+          print("eye sight:", sight)
+          cv2.putText(frame, f"({sight[0]}, {sight[1]})", (sight[0] - 35, sight[1] + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 0, 0), 1)
+
+     def follow_gaze_window(self, frame, eyes, sensitivity):
+          """
+          Implement a window that follows the estimated eye gaze.
+
+          Args:
+               frame (numpy.ndarray): Image frame.
+               eyes (tuple): A tuple containing the coordinates (x, y, width, height) of both eyes.
+               sensitivity (float): Sensitivity factor for eye gaze.
+
+          Returns:
+               None
+          """
+          coordinate = EyeCoordinate(eye_tracker)
+          eye_sight = coordinate.get_sight(eyes)
+
+          gaze_follower_width = 360
+          gaze_follower_height = 360
+
+          eye_sight_x_offset = int(sensitivity * (eye_sight[0] - frame.shape[1] // 2))
+          eye_sight_y_offset = int(sensitivity * (eye_sight[1] - frame.shape[0] // 2))
+
+          screen_width, screen_height = pyautogui.size()
+
+          new_window_x = screen_width // 2 + eye_sight_x_offset
+          new_window_y = screen_height // 2 + eye_sight_y_offset
+
+          if new_window_x < 0:
+               new_window_x = 0
+          elif new_window_x + gaze_follower_width > screen_width:
+               new_window_x = screen_width - gaze_follower_width
+
+          if new_window_y < 0:
+               new_window_y = 0
+          elif new_window_y + gaze_follower_height > screen_height:
+               new_window_y = screen_height - gaze_follower_height
+
+          cv2.namedWindow('Gaze Follower')
+          cv2.resizeWindow('Gaze Follower', gaze_follower_width, gaze_follower_height)
+          cv2.moveWindow('Gaze Follower', new_window_x, new_window_y)
+
+
+class EyeCoordinate:
+     def __init__(self, tracker):
+        self.tracker = tracker
+        
+     def find_centers(self, frame, face):
+          """
+          Find the centers of both eyes.
+
+          Args:
+               frame (numpy.ndarray): Image frame.
+               face (dlib.rectangle): Detected face.
+
+          Returns:
+               tuple: A tuple containing the coordinates (x, y, width, height) of both eyes.
+          """
+          landmarks = self.tracker.predictor(frame, face)
+          left_eye = landmarks.part(36).x, landmarks.part(37).y, landmarks.part(39).x - landmarks.part(36).x, landmarks.part(41).y - landmarks.part(37).y
+          right_eye = landmarks.part(42).x, landmarks.part(43).y, landmarks.part(45).x - landmarks.part(42).x, landmarks.part(47).y - landmarks.part(43).y
+          return left_eye, right_eye
+     
+     def get_centers(self, eyes):
+          """
+          Get the coordinates of the centers of the eyes.
+          
+          Args:
+               eyes (tuple): A tuple containing the coordinates (x, y, width, height) of both eyes.
                
-# 양쪽 눈의 중심을 찾는 함수 정의
-def find_eye_centers(face):
-     landmarks = predictor(gray, face)
-     left_eye = landmarks.part(36).x, landmarks.part(37).y, landmarks.part(39).x - landmarks.part(36).x, landmarks.part(41).y - landmarks.part(37).y
-     right_eye = landmarks.part(42).x, landmarks.part(43).y, landmarks.part(45).x - landmarks.part(42).x, landmarks.part(47).y - landmarks.part(43).y
-     return left_eye, right_eye
+          Returns:
+               list: A list containing the coordinates of the centers of both eyes.
+          """
+          eye_centers = [] # 리스트 변수 선언
+          for eye in eyes:
+               x, y, w, h = eye
+               eye_center_x = x + w // 2
+               eye_center_y = y + h // 2
+               eye_centers.append([eye_center_x, eye_center_y])
+          
+          return eye_centers
+     
+     def get_sight(self, eyes):
+          """
+          Get the coordinate of the estimated eye sight based on the centers of the eyes.
 
-# 눈 중심을 표시하는 함수 정의
-def draw_eye_centers(frame, eyes):
-     x1, y1, w1, h1 = eyes[0]
-     eye1_center_x = x1 + w1 // 2
-     eye1_center_y = y1 + h1 // 2
-          
-     x2, y2, w2, h2 = eyes[1]
-     eye2_center_x = x2 + w2 // 2
-     eye2_center_y = y2 + h2 // 2
-     
-     cv2.circle(frame, (eye1_center_x, eye1_center_y), 2, (0, 255, 0), -1)
-     cv2.putText(frame, f"({eye1_center_x}, {eye1_center_y})", (eye1_center_x - 35, eye1_center_y + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 255, 0), 1)
-     
-     cv2.circle(frame, (eye2_center_x, eye2_center_y), 2, (0, 255, 0), -1)
-     cv2.putText(frame, f"({eye2_center_x}, {eye2_center_y})", (eye2_center_x - 35, eye2_center_y + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 255, 0), 1)
-     
-     print("left_eye:",eyes[0],", right_eye:",eyes[1])
+          Args:
+               eyes (tuple): A tuple containing the coordinates (x, y, width, height) of both eyes.
 
-# 시선을 표시하는 함수 정의
-def draw_eye_sight(frame, eyes):
-     x1, y1, w1, h1 = eyes[0]
-     eye1_center_x = x1 + w1 // 2
-     eye1_center_y = y1 + h1 // 2
+          Returns:
+               tuple: A tuple containing the estimated coordinate of the eye sight (x, y).
+          """
+          eye_centers = self.get_centers(eyes)
+          eye_sight_x = (eye_centers[0][0] + eye_centers[1][0]) // 2
+          eye_sight_y = (eye_centers[0][1] + eye_centers[1][1]) // 2
           
-     x2, y2, w2, h2 = eyes[1]
-     eye2_center_x = x2 + w2 // 2
-     eye2_center_y = y2 + h2 // 2
-          
-     # 두 눈 중심의 중앙값으로 시선 좌표 계산
-     eye_sight_x = (eye1_center_x + eye2_center_x) // 2
-     eye_sight_y = (eye1_center_y + eye2_center_y) // 2
-          
-     cv2.circle(frame, (eye_sight_x, eye_sight_y), 2, (255, 0, 0), -1)
-     print("eye sight:",(eye_sight_x, eye_sight_y))
-     cv2.putText(frame, f"({eye_sight_x}, {eye_sight_y})", (eye_sight_x - 35, eye_sight_y + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 0, 0), 1)
-     
-# 시선을 따라가는 윈도우창을 구현하는 함수 정의
-def follow_gaze_window(frame, eyes, sensitivity):
-     x1, y1, w1, h1 = eyes[0]
-     eye1_center_x = x1 + w1 // 2
-     eye1_center_y = y1 + h1 // 2
-     
-     x2, y2, w2, h2 = eyes[1]
-     eye2_center_x = x2 + w2 // 2
-     eye2_center_y = y2 + h2 // 2
-     
-     eye_sight_x = (eye1_center_x + eye2_center_x) // 2
-     eye_sight_y = (eye1_center_y + eye2_center_y) // 2
-     
-     Gaze_Follower_width = 360
-     Gaze_Follower_height = 360
-     
-     # 시선 반응에 대한 감도 조절
-     eye_sight_x_offset = int(sensitivity * (eye_sight_x - frame.shape[1] // 2))
-     eye_sight_y_offset = int(sensitivity * (eye_sight_y - frame.shape[0] // 2))
-     
-     # 현재 화면 해상도 가져오기
-     screen_width, screen_height = pyautogui.size()
-     
-     # 새로운 윈도우 위치 계산
-     new_window_x = screen_width // 2 + eye_sight_x_offset
-     new_window_y = screen_height // 2 + eye_sight_y_offset
-     
-     # 윈도우가 프레임 경계를 벗어나지 않도록 보정
-     if new_window_x < 0:
-          new_window_x = 0
-     elif new_window_x + Gaze_Follower_width > screen_width:
-          new_window_x = screen_width - Gaze_Follower_width
-          
-     if new_window_y < 0:
-          new_window_y = 0
-     elif new_window_y + Gaze_Follower_height > screen_height:
-          new_window_y = screen_height - Gaze_Follower_height
-     
-     # 윈도우 이동
-     cv2.namedWindow('Gaze Follower')
-     cv2.resizeWindow('Gaze Follower', Gaze_Follower_width, Gaze_Follower_height)
-     cv2.moveWindow('Gaze Follower', new_window_x, new_window_y)
+          return eye_sight_x, eye_sight_y
 
 
 # 웹캠 시작
 cap = cv2.VideoCapture(0)
+eye_tracker = DrawSomething()
+coordinate = EyeCoordinate(eye_tracker)
 
 while True:
      # 프레임 읽기
@@ -116,14 +177,14 @@ while True:
      gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
      # 얼굴 검출
-     faces = detector(gray)
+     faces = eye_tracker.detector(gray)
 
      for face in faces:
-          eyes = find_eye_centers(face) # 양쪽 눈의 중심 좌표 구하기
-          draw_face_landmarks(frame, face)
-          draw_eye_centers(frame, eyes) # 눈 좌표 그리기
-          draw_eye_sight(frame, eyes) # 시선 좌표 그리기
-          follow_gaze_window(frame, eyes, 10.0)
+          eyes = coordinate.find_centers(frame, face) # 양쪽 눈의 중심 좌표 구하기
+          eye_tracker.draw_face_landmarks(frame, face)
+          eye_tracker.draw_eye_centers(frame, eyes) # 눈 좌표 그리기
+          eye_tracker.draw_eye_sight(frame, eyes) # 시선 좌표 그리기
+          eye_tracker.follow_gaze_window(frame, eyes, 10.0)
           
      
      # 결과 출력
