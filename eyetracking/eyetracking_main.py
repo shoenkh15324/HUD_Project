@@ -102,7 +102,7 @@ class DrawSomething:
           cv2.resizeWindow('Gaze Follower', gaze_follower_width, gaze_follower_height)
           cv2.moveWindow('Gaze Follower', new_window_x, new_window_y)
 
-
+# 눈의 좌표를 구하는 기능과 관련된 클래스
 class EyeCoordinate:
      def __init__(self, tracker):
         self.tracker = tracker
@@ -161,6 +161,8 @@ class EyeCoordinate:
 
 # 웹캠 시작
 cap = cv2.VideoCapture(0)
+
+# 클래스 초기화
 eye_tracker = DrawSomething()
 coordinate = EyeCoordinate(eye_tracker)
 
