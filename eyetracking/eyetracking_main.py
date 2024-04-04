@@ -1,9 +1,10 @@
 import cv2
 import dlib
 import pyautogui
+import numpy as np
 
 # 화면에 표시하는 기능과 관련된 클래스
-class DrawSomething:
+class EyeTracker:
      def __init__(self):
           self.detector = dlib.get_frontal_face_detector()
           self.predictor = dlib.shape_predictor("shape_predictor_68_face_landmarks.dat")
@@ -42,7 +43,7 @@ class DrawSomething:
                cv2.circle(frame, (center[0], center[1]), 2, (0, 255, 0), -1)
                cv2.putText(frame, f"({center[0]}, {center[1]})", (center[0] - 35, center[1] + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 255, 0), 1)
 
-          print("left_eye:", centers[0], ", right_eye:", centers[1])
+          # print("left_eye:", centers[0], ", right_eye:", centers[1])
 
      def draw_eye_sight(self, frame, eyes):
           """
@@ -56,11 +57,32 @@ class DrawSomething:
                None
           """
           coordinate = EyeCoordinate(eye_tracker)
-          sight = coordinate.get_sight(eyes)
+          sight = coordinate.get_sight(frame, eyes)
 
           cv2.circle(frame, (sight[0], sight[1]), 2, (255, 0, 0), -1)
-          print("eye sight:", sight)
+          # print("eye sight:", sight)
           cv2.putText(frame, f"({sight[0]}, {sight[1]})", (sight[0] - 35, sight[1] + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 0, 0), 1)
+          
+     def detect_and_draw_pupils(self, frame, eyes):
+          """
+          Detect pupils in the eye regions and draw them as circles on the frame.
+
+          Args:
+               frame (numpy.ndarray): Image frame.
+               eyes (tuple): A tuple containing the coordinates (x, y, width, height) of both eyes.
+
+          Returns:
+               None
+          """
+          for eye in eyes:
+               pupil_x, pupil_y, radius = pupil_detector.detect_pupil_using_black_detection(frame, eye)
+               cv2.circle(frame, (pupil_x, pupil_y), radius, (0, 255, 255), 0)
+               cv2.putText(frame, f"({pupil_x}, {pupil_y})", (pupil_x - 5, pupil_y - 25), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 255, 255), 1)
+          
+          # Print coordinates of left and right pupils
+          left_pupil_x, left_pupil_y, _ = pupil_detector.detect_pupil_using_black_detection(frame, eyes[0])
+          right_pupil_x, right_pupil_y, _ = pupil_detector.detect_pupil_using_black_detection(frame, eyes[1])
+          print("Left pupil:", (left_pupil_x, left_pupil_y), "Right pupil:", (right_pupil_x, right_pupil_y))
 
      def follow_gaze_window(self, frame, eyes, sensitivity):
           """
@@ -75,7 +97,7 @@ class DrawSomething:
                None
           """
           coordinate = EyeCoordinate(eye_tracker)
-          eye_sight = coordinate.get_sight(eyes)
+          eye_sight = coordinate.get_sight(frame, eyes)
 
           gaze_follower_width = 360
           gaze_follower_height = 360
@@ -142,7 +164,7 @@ class EyeCoordinate:
           
           return eye_centers
      
-     def get_sight(self, eyes):
+     def get_sight(self, frame, eyes):
           """
           Get the coordinate of the estimated eye sight based on the centers of the eyes.
 
@@ -152,19 +174,81 @@ class EyeCoordinate:
           Returns:
                tuple: A tuple containing the estimated coordinate of the eye sight (x, y).
           """
-          eye_centers = self.get_centers(eyes)
-          eye_sight_x = (eye_centers[0][0] + eye_centers[1][0]) // 2
-          eye_sight_y = (eye_centers[0][1] + eye_centers[1][1]) // 2
+          left_pupil_x, left_pupil_y, _ = pupil_detector.detect_pupil_using_black_detection(frame, eyes[0])
+          right_pupil_x, right_pupil_y, _ = pupil_detector.detect_pupil_using_black_detection(frame, eyes[1])
+          
+          eye_sight_x = (left_pupil_x + right_pupil_x) // 2
+          eye_sight_y = (left_pupil_y + right_pupil_y) // 2
           
           return eye_sight_x, eye_sight_y
+
+class PupilDetector:
+     def __init__(self, eye_tracker):
+          self.eye_tracker = eye_tracker
+
+     def detect_pupil_using_black_detection(self, frame, eye):
+          """
+          Detect the pupil within the eye region using black detection method.
+
+          Args:
+               frame (numpy.ndarray): Image frame.
+               eye (tuple): A tuple containing the coordinates (x, y, width, height) of the eye.
+
+          Returns:
+               tuple: A tuple containing the coordinates of the detected pupil (x, y, radius).
+          """
+          x, y, w, h = eye
+          eye_region = frame[y:y+h, x:x+w]
+
+          # Convert eye region to HSV color space
+          eye_hsv = cv2.cvtColor(eye_region, cv2.COLOR_BGR2HSV)
+
+          # Define lower and upper bounds for black color in HSV
+          lower_black = np.array([0, 0, 0])
+          upper_black = np.array([180, 255, 100])
+
+          # Threshold the HSV image to get only black colors
+          black_mask = cv2.inRange(eye_hsv, lower_black, upper_black)
+
+          # Find contours
+          contours, _ = cv2.findContours(black_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+          # If no contours found, return center of eye region
+          if len(contours) == 0:
+               return (x + w // 2, y + h // 2, 0)  # Return radius as 0 when no pupil is detected
+
+          # Get the largest contour (presumably the pupil)
+          largest_contour = max(contours, key=cv2.contourArea)
+
+          # Get the moments of the largest contour
+          M = cv2.moments(largest_contour)
+
+          # Check if the contour area is 0
+          if M["m00"] == 0:
+               return (x + w // 2, y + h // 2, 0)  # Return radius as 0 when no pupil is detected
+
+          # Calculate the centroid of the contour
+          cx = int(M["m10"] / M["m00"])
+          cy = int(M["m01"] / M["m00"])
+
+          # Translate centroid coordinates to eye region coordinates
+          pupil_x = x + cx
+          pupil_y = y + cy
+
+          # Calculate radius as half of eye region width
+          radius = w // 5
+
+          return (pupil_x, pupil_y, radius)
+
 
 
 # 웹캠 시작
 cap = cv2.VideoCapture(0)
 
 # 클래스 초기화
-eye_tracker = DrawSomething()
+eye_tracker = EyeTracker()
 coordinate = EyeCoordinate(eye_tracker)
+pupil_detector = PupilDetector(eye_tracker)
 
 while True:
      # 프레임 읽기
@@ -186,9 +270,9 @@ while True:
           eye_tracker.draw_face_landmarks(frame, face)
           eye_tracker.draw_eye_centers(frame, eyes) # 눈 좌표 그리기
           eye_tracker.draw_eye_sight(frame, eyes) # 시선 좌표 그리기
-          eye_tracker.follow_gaze_window(frame, eyes, 10.0)
-          
-     
+          eye_tracker.detect_and_draw_pupils(frame, eyes)  # 눈동자 감지 및 그리기
+          eye_tracker.follow_gaze_window(frame, eyes, 75.0) # 시선을 추적하는 윈도우창을 띄우기
+               
      # 결과 출력
      cv2.imshow('Eye Tracker', frame)
 
